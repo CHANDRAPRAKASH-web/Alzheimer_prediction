@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+
+.ipynb_checkpoints/
+
+models/
+
+outputs/
+
+dataset/split/
+dataset/processed/
+
+.vscode/
+
+.DS_Store
