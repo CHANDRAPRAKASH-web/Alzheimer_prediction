@@ -1,328 +1,266 @@
 """
 =========================================================
-NeuroVision AI - Streamlit Application
+Aid Axis — Cognitive Health & NeuroVision AI Platform
 
-Interactive interface for Alzheimer's disease
-classification from brain MRI images.
+Unified Healthcare Platform integrating:
+1. NeuroVision AI — Deep Learning Brain MRI Analysis & Grad-CAM
+2. Cognitive Health Engine — Longitudinal Cognitive Assessment,
+   Tracking, Progression Analytics & Digital Twin Prototype.
+3. Memory Intelligence Hub — AI-powered scheduling companion.
+4. Medical Document Vault — Secure patient document management.
+5. Caregiver Dashboard — Patient overview, cognitive progress,
+   and read-only medical record access.
 
-Features:
-- MRI image upload
-- Alzheimer's stage prediction
-- Prediction confidence
-- Class probability distribution
-
-Author  : CP
-Project : NeuroVision AI
+Author  : CP & Aid Axis Development Team
+Project : Aid Axis
 =========================================================
 """
 
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import streamlit as st
-import torch
-from PIL import Image
 
-from app.inference import (
-    load_inference_model,
-    predict_image,
-    generate_gradcam_explanation
-)
+# Healthcare Theme & Styles
+from app.cognitive.styles import apply_healthcare_theme
 
+# Database & Repositories
+from database.repository import AssessmentRepository
+from database.event_repository import EventRepository
+from database.document_repository import DocumentRepository
+
+# Modules
+from app.neurovision import render_neurovision
+from app.cognitive.overview import render_cognitive_overview
+from app.cognitive.assessment_flow import render_assessment_wizard, reset_assessment
+from app.cognitive.history import render_assessment_history
+from app.cognitive.dashboard import render_progress_dashboard
+from app.cognitive.analytics import render_progression_analytics
+from app.cognitive.digital_twin import render_cognitive_digital_twin
+from app.memory_hub import render_memory_intelligence_hub
+from app.document_vault import render_document_vault
+from app.caregiver_dashboard import render_caregiver_dashboard
 
 
 # =========================================================
 # Page Configuration
 # =========================================================
-
 st.set_page_config(
-    page_title="NeuroVision AI",
+    page_title="Aid Axis — Cognitive Health Platform",
     page_icon="🧠",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-
 # =========================================================
-# Device
-# =========================================================
-
-DEVICE = torch.device(
-    "cuda" if torch.cuda.is_available()
-    else "cpu"
-)
-
-
-# =========================================================
-# Load Model
+# Cached resource singletons
 # =========================================================
 
 @st.cache_resource
-def get_model():
-    """
-    Loads the trained model once and caches it.
+def get_repository() -> AssessmentRepository:
+    return AssessmentRepository()
 
-    This prevents the model from being reloaded every time
-    the Streamlit application reruns.
-    """
 
-    model = load_inference_model(
-        DEVICE
-    )
+@st.cache_resource
+def get_event_repository() -> EventRepository:
+    return EventRepository()
 
-    return model
+
+@st.cache_resource
+def get_document_repository() -> DocumentRepository:
+    return DocumentRepository()
 
 
 # =========================================================
-# Main Application
+# Navigation constants
 # =========================================================
+_ALL_MODULES = [
+    "🧠 NeuroVision AI (MRI Analysis)",
+    "📋 Cognitive Health Engine",
+    "🗓️ Memory Intelligence Hub",
+    "🗂️ Medical Document Vault",
+    "👩‍⚕️ Caregiver Dashboard",
+]
+
+_COGNITIVE_SUBPAGES = [
+    "Overview",
+    "New Assessment",
+    "Assessment History",
+    "Progress Dashboard",
+    "Progression Analytics",
+    "Cognitive Digital Twin",
+]
+
 
 def main():
+    # ---------------------------------------------------------
+    # Apply Unified Healthcare Styling
+    # ---------------------------------------------------------
+    apply_healthcare_theme()
 
-    # -----------------------------------------------------
-    # Header
-    # -----------------------------------------------------
+    repository = get_repository()
+    event_repository = get_event_repository()
+    document_repository = get_document_repository()
 
-    st.title(
-        "🧠 NeuroVision AI"
-    )
-
-    st.subheader(
-        "Alzheimer's Disease Classification from Brain MRI"
-    )
-
-    st.write(
-        """
-        Upload a brain MRI image to obtain the model's
-        predicted Alzheimer's disease classification and
-        confidence scores.
-        """
-    )
-
-    st.divider()
-
-    # -----------------------------------------------------
-    # Load Model
-    # -----------------------------------------------------
-
-    with st.spinner(
-        "Loading NeuroVision AI model..."
-    ):
-
-        model = get_model()
-
-    # -----------------------------------------------------
-    # MRI Upload
-    # -----------------------------------------------------
-
-    uploaded_file = st.file_uploader(
-
-        "Upload Brain MRI",
-
-        type=[
-            "jpg",
-            "jpeg",
-            "png"
-        ]
-
-    )
-
-    # -----------------------------------------------------
-    # No Image Uploaded
-    # -----------------------------------------------------
-
-    if uploaded_file is None:
-
-        st.info(
-            "Upload an MRI image to begin analysis."
+    # ---------------------------------------------------------
+    # Sidebar: Brand, Patient ID, and Navigation
+    # ---------------------------------------------------------
+    with st.sidebar:
+        st.markdown(
+            """
+            <div style="padding: 0.5rem 0 1rem 0;">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <span style="font-size: 2rem;">🧠</span>
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.4rem; color: #F8FAFC; letter-spacing: -0.02em;">AID AXIS</h2>
+                        <div style="font-size: 0.75rem; color: #A78BFA; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;">
+                            Cognitive Health Platform
+                        </div>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        return
+        st.divider()
 
-    # -----------------------------------------------------
-    # Open Image
-    # -----------------------------------------------------
+        # Patient Profile Management
+        st.markdown("##### 👤 Patient Profile")
+        existing_patients = repository.get_all_patients()
+        default_patient = "PATIENT-001"
+        if default_patient not in existing_patients:
+            existing_patients.append(default_patient)
 
-    try:
-
-        image = Image.open(
-            uploaded_file
-        ).convert("RGB")
-
-    except Exception:
-
-        st.error(
-            "The uploaded file could not be opened as an image."
+        patient_mode = st.radio(
+            "Profile Selection",
+            ["Select Existing", "Enter New ID"],
+            index=0,
+            horizontal=True,
+            label_visibility="collapsed"
         )
 
-        return
-
-    # -----------------------------------------------------
-    # Display Uploaded Image
-    # -----------------------------------------------------
-
-    st.subheader(
-        "Uploaded MRI"
-    )
-
-    st.image(
-
-        image,
-
-        caption="Uploaded Brain MRI",
-
-        width=400
-
-    )
-
-    st.divider()
-
-    # -----------------------------------------------------
-    # Run Prediction
-    # -----------------------------------------------------
-
-    with st.spinner(
-        "Analyzing MRI..."
-    ):
-
-        result = predict_image(
-
-            model=model,
-
-            image=image,
-
-            device=DEVICE
-
-        )
-
-        gradcam_image, heatmap, gradcam_class_idx = (
-            generate_gradcam_explanation(
-                model=model,
-                image=image,
-                device=DEVICE
+        if patient_mode == "Select Existing":
+            selected_patient = st.selectbox(
+                "Active Patient Identifier:",
+                existing_patients,
+                index=existing_patients.index(
+                    st.session_state.get("active_patient_id", default_patient)
+                ) if st.session_state.get("active_patient_id", default_patient) in existing_patients else 0
             )
+            st.session_state["active_patient_id"] = selected_patient
+        else:
+            new_id = st.text_input(
+                "Enter New Patient Identifier:",
+                value="",
+                placeholder="e.g., PATIENT-002"
+            ).strip().upper()
+            if new_id:
+                st.session_state["active_patient_id"] = new_id
+            else:
+                st.session_state["active_patient_id"] = default_patient
+
+        active_patient = st.session_state["active_patient_id"]
+
+        st.divider()
+
+        # Main Module Navigation
+        st.markdown("##### 🧭 Navigation")
+
+        cur_module = st.session_state.get("primary_module", _ALL_MODULES[0])
+        if cur_module not in _ALL_MODULES:
+            cur_module = _ALL_MODULES[0]
+
+        primary_module = st.radio(
+            "Primary Module",
+            _ALL_MODULES,
+            index=_ALL_MODULES.index(cur_module),
+            key="primary_module"
         )
 
-    # -----------------------------------------------------
-    # Prediction Result
-    # -----------------------------------------------------
+        # Sub-navigation for Cognitive Health Engine
+        if primary_module == "📋 Cognitive Health Engine":
+            st.markdown("###### Cognitive Engine Sections:")
+            cur_sub = st.session_state.get("cognitive_subpage", "Overview")
+            sub_idx = _COGNITIVE_SUBPAGES.index(cur_sub) if cur_sub in _COGNITIVE_SUBPAGES else 0
+            st.radio(
+                "Subpage",
+                _COGNITIVE_SUBPAGES,
+                index=sub_idx,
+                key="cognitive_subpage",
+                label_visibility="collapsed"
+            )
 
-    st.subheader(
-        "Prediction Result"
-    )
+        st.divider()
 
-    prediction = result[
-        "predicted_class"
-    ]
-
-    confidence = result[
-        "confidence"
-    ]
-
-    # -----------------------------------------------------
-    # Main Metrics
-    # -----------------------------------------------------
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.metric(
-
-            label="Predicted Class",
-
-            value=prediction
-
+        # Privacy notice
+        st.markdown(
+            """
+            <div style="font-size: 0.75rem; color: #64748B; line-height: 1.4;">
+                <strong style="color: #94A3B8;">Prototype Notice:</strong><br/>
+                For investigational and observational use only.
+                Data is isolated per patient ID in local parameterised SQLite storage.
+                Not an FDA/CE-cleared diagnostic device.
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-    with col2:
+    # ---------------------------------------------------------
+    # Main Content Router
+    # ---------------------------------------------------------
+    if primary_module == "🧠 NeuroVision AI (MRI Analysis)":
+        render_neurovision()
 
-        st.metric(
+    elif primary_module == "📋 Cognitive Health Engine":
+        subpage = st.session_state.get("cognitive_subpage", "Overview")
 
-            label="Confidence",
+        def navigate_to_assessment():
+            reset_assessment()
+            st.session_state["cognitive_subpage"] = "New Assessment"
+            st.rerun()
 
-            value=f"{confidence * 100:.2f}%"
+        if subpage == "Overview":
+            render_cognitive_overview(
+                patient_id=active_patient,
+                repository=repository,
+                on_start_assessment=navigate_to_assessment
+            )
+        elif subpage == "New Assessment":
+            render_assessment_wizard(patient_id=active_patient, repository=repository)
+        elif subpage == "Assessment History":
+            render_assessment_history(patient_id=active_patient, repository=repository)
+        elif subpage == "Progress Dashboard":
+            render_progress_dashboard(patient_id=active_patient, repository=repository)
+        elif subpage == "Progression Analytics":
+            render_progression_analytics(patient_id=active_patient, repository=repository)
+        elif subpage == "Cognitive Digital Twin":
+            render_cognitive_digital_twin(patient_id=active_patient, repository=repository)
 
+    elif primary_module == "🗓️ Memory Intelligence Hub":
+        render_memory_intelligence_hub(
+            patient_id=active_patient,
+            repository=event_repository,
+            tz_name="Asia/Kolkata"
         )
 
-    # -----------------------------------------------------
-    # Class Probabilities
-    # -----------------------------------------------------
-
-    st.subheader(
-        "Class Probabilities"
-    )
-
-    probabilities = result[
-        "probabilities"
-    ]
-
-    for class_name, probability in probabilities.items():
-
-        st.write(
-
-            f"**{class_name}** — "
-            f"{probability * 100:.2f}%"
-
+    elif primary_module == "🗂️ Medical Document Vault":
+        render_document_vault(
+            patient_id=active_patient,
+            repository=document_repository,
         )
 
-        st.progress(
-            float(probability)
-        )
-    # =========================================================
-    # Grad-CAM Explanation
-    # =========================================================
-
-    st.divider()
-
-    st.subheader(
-        "Model Explanation"
-    )
-
-    st.write(
-        """
-        Grad-CAM highlights the image regions that contributed
-        most strongly to the model's prediction.
-        """
-    )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.image(
-            image,
-            caption="Original MRI",
-            use_container_width=True
+    elif primary_module == "👩‍⚕️ Caregiver Dashboard":
+        render_caregiver_dashboard(
+            assessment_repo=repository,
+            document_repo=document_repository,
         )
 
-    with col2:
-
-        st.image(
-            gradcam_image,
-            caption=(
-                f"Grad-CAM — "
-                f"{result['predicted_class']}"
-            ),
-            use_container_width=True
-        )
-
-    # -----------------------------------------------------
-    # Disclaimer
-    # -----------------------------------------------------
-
-    st.divider()
-
-    st.warning(
-        """
-        Research Use Only: NeuroVision AI is an experimental
-        machine-learning system and is not a medical diagnostic
-        tool. Its predictions should not be used as a substitute
-        for evaluation by qualified healthcare professionals.
-        """
-    )
-
-
-# =========================================================
-# Entry Point
-# =========================================================
 
 if __name__ == "__main__":
-
     main()

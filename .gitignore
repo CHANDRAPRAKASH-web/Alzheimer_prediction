@@ -1,15 +1,35 @@
+# Byte-compiled / optimized / cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
+# Jupyter
 .ipynb_checkpoints/
 
-models/
+# Model weights and checkpoints (large binaries)
+*.pth
+*.pt
+*.bin
+*.onnx
 
+# Outputs and databases
 outputs/
+*.db
+*.sqlite3
 
+# Datasets
 dataset/split/
 dataset/processed/
 
+# IDE & OS
 .vscode/
-
 .DS_Store
+*.bak
+
+# Secrets, API keys, and local environment (NEVER COMMIT)
+.streamlit/secrets.toml
+.streamlit/*
+!.streamlit/secrets.toml.example
+.env
+*.env
