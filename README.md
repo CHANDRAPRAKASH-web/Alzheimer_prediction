@@ -99,3 +99,4 @@ python -m unittest discover tests
 - **Confidentiality**: API keys and secrets are strictly excluded from version control via `.gitignore`.
 - **Database**: Parameterized SQLite transactions with WAL mode prevent SQL injection vulnerabilities.
 - **Clinical Notice**: Aid Axis is designed for observational and investigational research. It is not an FDA/CE-cleared diagnostic device.
+
